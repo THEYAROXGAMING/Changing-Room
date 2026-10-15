@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>The Shifting Room</title>
+<style>
+:root{--bg:#07080c;--fg:#e9e4d6;--ac:#e0a84a;--pn:#12141c;--ln:#ffffff26;box-sizing:border-box;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+@media(prefers-color-scheme:dark){:root{--bg:#07080c;--fg:#e9e4d6}}
+:root[data-theme=light],:root[data-theme=dark]{--bg:#07080c}
+html,body{margin:0;height:100%;height:100dvh;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.ov{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:safe center;overflow:auto;text-align:center;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));background:var(--bg);gap:12px}
+#menu{display:flex;z-index:60}#cine{z-index:50;transition:background 1.5s}#modal{z-index:70;background:#000c}#card{z-index:30}
+h1{font:700 clamp(30px,8vw,56px)/1.05 Georgia,serif;margin:0;letter-spacing:.02em}
+h2{font:700 28px Georgia,serif;margin:0}p{margin:0;max-width:34em}
+#ct{font:clamp(20px,4.6vw,28px)/1.5 Georgia,serif;max-width:24em;opacity:0;transition:opacity 1s}
+button{font:600 16px system-ui,sans-serif;color:var(--fg);background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:12px 22px;min-width:150px}
+button:active{background:var(--ac);color:#111}
+#hud{position:fixed;top:env(safe-area-inset-top,0);left:0;right:0;z-index:5;display:flex;justify-content:space-between;padding:8px max(10px,env(safe-area-inset-right)) 8px max(10px,env(safe-area-inset-left));pointer-events:none;font-size:14px;text-shadow:0 1px 3px #000}
+#hud button{pointer-events:auto;min-width:0;padding:8px 12px;margin-left:6px}
+#inv{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);left:50%;transform:translateX(-50%);z-index:5;display:flex;gap:8px;pointer-events:none}
+#inv b{width:44px;height:44px;border:1px solid var(--ln);border-radius:8px;background:#0008;display:grid;place-items:center;font-size:22px}
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:90;background:#000b;padding:8px 16px;border-radius:20px;opacity:0;transition:opacity .3s;pointer-events:none;text-align:center;max-width:86vw}
+#fx{position:fixed;inset:0;background:#000;opacity:0;transition:opacity .35s;z-index:20;pointer-events:none}
+#jb{position:fixed;width:110px;height:110px;margin:-55px;border:2px solid #fff4;border-radius:50%;display:none;z-index:4;pointer-events:none}
+#jk{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:#fff6}
+#mb{background:var(--pn);border:1px solid var(--ln);border-radius:14px;padding:20px;max-width:min(92vw,420px);max-height:68dvh;overflow:auto;text-align:left}
+#mb p{margin:6px 0}#kp{display:flex;gap:10px;justify-content:center;margin:12px 0}
+#kp button{min-width:0;width:64px;font-size:28px;padding:14px 0}
+#err{color:#d9695d}
+@media(orientation:landscape) and (max-height:520px){h1{font-size:28px}#ct{font-size:18px}.ov{gap:8px}#mb{max-height:60dvh}#hud{font-size:12px}#hud button{padding:6px 10px}#inv b{width:36px;height:36px;font-size:18px}#toast{bottom:56px}#kp button{width:52px;padding:8px 0}}
+</style></head><body>
+<div id="hud"><span><span id="hl"></span><br><span id="tm"></span></span><span><button id="bh">Hint</button><button id="bj">Journal</button><button id="bp">Pause</button></span></div>
+<div id="inv"></div><div id="toast"></div><div id="jb"><div id="jk"></div></div><div id="fx"></div>
+<div id="card" class="ov"><h2 id="cn"></h2><p id="cs"></p></div>
+<div id="modal" class="ov"><div id="mb"></div><button id="mx">Close</button></div>
+<div id="cine" class="ov"><p id="ct"></p><button id="skip">Skip story</button></div>
+<div id="menu" class="ov"><h1>The Shifting Room</h1><p>You are trapped in one room that keeps changing around you.</p>
+<button id="bc">Continue</button><button id="bn">New game</button><button id="bw">How to play</button><button id="ba">Achievements</button><p id="err"></p></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+const $=i=>document.getElementById(i),RM=['','I','II','III','IV','V','VI','VII'],PI=Math.PI,WN=['north','south','east','west'];
+// clue templates: digits a,b,c are 1-7. 2 parts = a framed picture appears after the room first shifts.
+const T=[
+(a,b,c)=>[`The way out is ${a}${b}${c}.`],
+(a,b,c)=>[`First digit: ${a}.`,`The last two digits: ${b}${c}.`],
+(a,b,c)=>[`First ${a}, second ${b}.`,`All three digits add up to ${a+b+c}.`],
+(a,b,c)=>[`Read it backward: ${c}${b}${a}.`],
+(a,b,c)=>[`Every digit is one too big: ${a+1}${b+1}${c+1}.`],
+(a,b,c)=>[`In Roman numerals: ${RM[a]}, ${RM[b]}, ${RM[c]}.`],
+(a,b,c)=>[`${a} _ ${c}.`,`The middle digit is ${b}.`],
+(a,b,c)=>[`Two too big, and backward: ${c+2}${b+2}${a+2}.`],
+(a,b,c)=>[`Backward and two too big: ${c+2}${b+2}${a+2}.`,`Check: the digits add up to ${a+b+c}.`],
+(a,b,c)=>[`First: ${RM[a]}. Second: one too big, ${b+1}.`,`Third: ten minus ${10-c}.`],
+(a,b,c)=>[`The first is ${a}. The other two add up to ${b+c}.`,`The second digit is ${b}.`],
+(a,b,c)=>[`Last digit in Roman numerals: ${RM[c]}.`,`The first two, each one too big: ${a+1}${b+1}.`],
+(a,b,c)=>[`The digits multiply to ${a*b*c}. The first is ${a}.`,`The second digit is ${b}.`],
+(a,b,c)=>[`Backward, each two too big: ${c+2}${b+2}${a+2}.`,`The first digit in Roman numerals: ${RM[a]}.`],
+(a,b,c)=>[`First: ten minus ${10-a}. Second: ${RM[b]}.`,`The third is one too big: ${c+1}.`],
+(a,b,c)=>[`Roman numerals, backward: ${RM[c]} ${RM[b]} ${RM[a]}.`,`The three digits add up to ${a+b+c}.`]];
+// [name, hue, room radius, flags(1 flip gravity,2 dark,4 shrink), story]
+const CH=[
+['The Bedroom',20,4.5,0,'You wake in your childhood bedroom. It should not exist.'],
+['The Study',210,5,0,"Your father's study. The letter on the desk was never finished."],
+['The Library',280,5.5,0,'Every book is a day you forgot.'],
+['The Kitchen',35,5,0,'Burnt toast. The morning everything went wrong.'],
+['The Attic',50,6,4,'The walls are closer every time you blink.'],
+['The Inverted Room',170,5,1,'Gravity is a memory too, and the house is losing its grip on it.'],
+['The Gallery',320,6,0,'Paintings of rooms you never saw. Each one is a door the house is considering.'],
+['The Basement',200,5,2,"Cold. Beneath your feet, the lab's power core hums."],
+['The Lab',150,6,6,'Your lab. The override console flickers somewhere in the dark.'],
+['The Nursery',330,4.5,0,'A lullaby plays from nowhere. Someone kept this room exactly as it was.',10],
+['The Greenhouse',120,6,2,'Glass walls, and nothing outside but fog. The plants lean toward you.',11],
+['The Chapel',260,6,2,'You never prayed here. The house built it from how badly you wanted a way out.',12],
+['The Hall of Mirrors',190,5.5,5,'Every reflection moves a moment late. One of them is the real room.',13],
+['The Observatory',230,6,1,'The dome shows a sky you have never seen. The stars are rearranging themselves.',14],
+['The Archive',40,6.5,6,'Every day you forgot is filed here. The house is reading them aloud.',15],
+['The Heart',0,6,7,'The core of the house. It looks exactly like the first room.',9]];
+const DN=['Easy','Medium','Hard','Nightmare'],DL=()=>Math.min(3,S.ch/4|0);
+const INTRO=[
+'Mnemosyne Labs, 2041. Architect Mara Quill built a house that remembers.',
+'Not with cameras. With the memories of whoever stands inside it. Walls that bend toward what you love. Doors that open for what you fear.',
+'The investors wanted proof. Mara trusted her work enough to step inside. "Sixty minutes," she told her assistant. "Then pull me out."',
+'The door sealed behind her. The house began to listen.',
+'At minute forty, the power failed. Her assistant ran for the manual override, and the emergency signal reached the house instead.',
+'Now the house feeds on Mara\'s memories to build itself, and every time she looks away, it rewrites the room to keep her.',
+'You are Mara. Ten rooms lie between you and the Heart, where the override still waits. Find the codes. Find the doors.',
+'Do not blink.'];
+const END=[
+['The Heart shudders and goes dark. Light floods in.','You wake on the lab floor. Your assistant is crying and laughing at once.','The house is silent now. You remember everything, including the sixty minutes.','Ending: Freedom'],
+['The override hits. The walls fall away.','You walk out of the lab into daylight, but one room stays with you.','Some nights the ceiling is lower than it should be.','Ending: Echo'],
+['The door opens onto a bedroom. Your childhood bedroom.','The house learned too much from the way you struggled.','Somewhere, a clock starts counting sixty minutes again.','Ending: Loop']];
+let S={hints:0,jr:[],seed:1},G,O={},props=[],wm=[],R=5,pl,roll=0,rollT=0,run=false,ui=false,last=0,away=0,mt=0,mcd=0,sens=1,snd=true,ren,scene,cam,lamp,amb,rc,v2,stick=null;
+const inp={mx:0,mz:0,k:{}},ptr={};
+// ---------- audio ----------
+let ac,dr;
+function beep(f,d,ty,v){if(!snd)return;try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();if(ac.state=='suspended')ac.resume();const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime;o.type=ty;o.frequency.value=f;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(ac.destination);o.start();o.stop(t+d)}catch(e){}}
+function drone(){if(dr||!snd||!ac)return;try{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=55;o.type='sine';g.gain.value=.04;o.connect(g);g.connect(ac.destination);o.start();dr=1}catch(e){}}
+// ---------- helpers ----------
+const sh=(i,on)=>{$(i).style.display=on?'flex':'none'};
+const AC=[['first','First clue','Read a note.'],['sharp','Sharp eyes','Find a note within 25 seconds of entering a room.'],['safe','Safecracker','Open a safe.'],['blink',"Don't blink",'Live through 5 room changes in one room.'],['clear','Clear mind','Escape a room without a hint.'],['fast','Quick hands','Escape a room in under 90 seconds.'],['half','Halfway home','Reach room 6.'],['nm','Into the nightmare','Reach room 13.'],['free','Escaped','Finish the game.']];
+let A={};try{A=JSON.parse(localStorage.getItem('shiftach'))||{}}catch(e){}
+function ach(id){if(A[id])return;A[id]=1;try{localStorage.setItem('shiftach',JSON.stringify(A))}catch(e){}const a=AC.find(x=>x[0]==id);setTimeout(()=>toast('Achievement: '+a[1]),900);beep(990,.2,'triangle',.1)}
+const fmt=t=>(t/60|0)+':'+String(t%60|0).padStart(2,'0');
+function toast(t){const e=$('toast');e.textContent=t;e.style.opacity=1;clearTimeout(e.tm);e.tm=setTimeout(()=>e.style.opacity=0,2200)}
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const sv=()=>{try{localStorage.setItem('shiftroom',JSON.stringify({ch:S.ch,seed:S.seed,hints:S.hints,jr:S.jr,t:S.t}))}catch(e){}};
+const ld=()=>{try{return JSON.parse(localStorage.getItem('shiftroom'))}catch(e){return null}};
+function openM(h){$('mb').innerHTML=h;ui=true;sh('modal',1)}
+function closeM(){ui=false;sh('modal',0)}
+function jr(t){const s=`Room ${S.ch+1}: ${t}`;if(!S.jr.includes(s))S.jr.push(s);sv()}
+function inv(){$('inv').innerHTML=`<b>${S.got.note?'📝':''}</b><b>${S.got.paint?'🖼️':''}</b><b>${S.got.key?'🔑':''}</b>`}
+// ---------- cinematic ----------
+function cine(sl,done){let i=0,tm;const o=$('cine');sh('cine',1);
+const show=()=>{clearTimeout(tm);if(i>=sl.length){sh('cine',0);o.style.background='';done();return}
+const t=$('ct'),k=i++;t.style.opacity=0;setTimeout(()=>{t.textContent=sl[k];t.style.opacity=1;o.style.background=`radial-gradient(circle at 50% 38%,hsl(${210+k*28} 38% 15%),#050508 75%)`},700);tm=setTimeout(show,6500)};
+o.onclick=show;$('skip').onclick=e=>{e.stopPropagation();i=sl.length;show()};show()}
+// ---------- 3D ----------
+function tex(h,k){const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d'),r=Math.random;g.fillStyle='#bbb';g.fillRect(0,0,128,128);
+if(k==3||k==8||k==10||k==12){for(let x=0;x<128;x+=32)for(let y=0;y<128;y+=32){g.fillStyle=(x+y)%64?'#d8d8d8':'#9a9a9a';g.fillRect(x,y,32,32)}}
+else for(let y=0;y<128;y+=16){g.fillStyle=`rgba(0,0,0,${r()*.2})`;g.fillRect(0,y,128,16);g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,y,128,1);for(let i=0;i<3;i++)g.fillRect(r()*128,y,1,16)}
+const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(5,5);return t}
+// furniture: [w,d,h,texture,colour,[extras: type(b/c/s),a,b,c,x,y,z,colour,tex]]
+const F={
+bed:[1.2,2,.5,3,0x6a7aa0,[['b',.5,.12,.35,0,.31,-.7,0xeeeeee],['b',1.2,.55,.1,0,.4,-.95,0x5a3a20,0]]],
+wardrobe:[.9,.5,1.9,0,0x8a5a30,[['b',.04,1.7,.02,0,0,.26,0x2a1a0a],['b',.08,.08,.04,.1,0,.27,0xd0b060]]],
+nightstand:[.45,.45,.5,0,0x8a5a30,[['c',.12,.3,.12,0,.4,0,0xffe0a0]]],
+desk:[1.2,.6,.75,0,0x7a4a28,[['b',.5,.3,.05,0,.52,-.1,0x222a33],['b',.3,.06,.2,.4,.4,.1,0xa04040]]],
+chair:[.5,.5,.5,3,0x7a3a3a,[['b',.5,.5,.08,0,.5,-.21,0x7a3a3a]]],
+bookshelf:[.9,.35,1.8,2,0xffffff,[]],
+armchair:[.8,.8,.7,3,0x805060,[['b',.8,.5,.2,0,.5,-.3,0x805060]]],
+table:[1.1,.8,.75,0,0x9a6a3a,[['c',.15,.2,.15,0,.47,0,0xa0c0d0]]],
+stove:[.7,.6,.9,5,0xdddddd,[['c',.15,.03,.15,-.15,.46,-.1,0x222222],['c',.15,.03,.15,.15,.46,.1,0x222222]]],
+fridge:[.7,.7,1.8,5,0xe8e8e8,[['b',.04,.5,.04,.3,.2,.36,0x888888]]],
+counter:[1.2,.6,.9,6,0xbbbbbb,[['b',1.2,.05,.62,0,.47,0,0x6a4a2a]]],
+pantry:[.8,.4,1.7,1,0xb8a070,[]],
+trunk:[.9,.5,.5,1,0x7a5030,[['b',.9,.08,.52,0,.1,0,0x3a2a1a]]],
+crate:[.7,.7,.7,1,0xc9a06a,[]],
+boxes:[.8,.6,.6,1,0xb09060,[['b',.5,.3,.4,0,.45,0,0xa08050]]],
+mirror:[.9,.12,1.7,4,0x99aabb,[['b',1,1.8,.04,0,0,.07,0x6a5020]]],
+pedestal:[.5,.5,1,6,0xd0d0c8,[['s',.4,.4,.4,0,.7,0,0xe8e4d8]]],
+bench:[1.4,.5,.5,3,0x6a4a30,[]],
+boiler:[.6,.6,1.5,4,0x7a8088,[['c',.1,.6,.1,.2,1.05,0,0xaa6a30]]],
+workbench:[1.4,.7,.9,0,0x6a5a4a,[['b',.15,.15,.15,.5,.52,0,0x444444]]],
+console:[.7,.6,1.4,4,0x3a4048,[['b',.5,.2,.04,0,.2,.31,0x40ff90],['b',.1,.1,.04,.2,-.1,.31,0xff4040]]],
+server:[.6,.6,1.8,4,0x20252b,[['b',.4,.04,.04,0,.5,.31,0x40a0ff],['b',.4,.04,.04,0,.2,.31,0x40ff90]]],
+piano:[1.4,.6,1.1,0,0x2a2018,[['b',1.3,.06,.3,0,.2,.31,0xf0f0e8]]],
+sofa:[1.6,.8,.7,3,0x607a60,[['b',1.6,.5,.2,0,.4,-.3,0x607a60]]],
+crib:[1,.6,.7,0,0xe8d8c0,[['b',.9,.06,.5,0,.38,0,0xf4f0ff,3]]],
+dresser:[1,.5,.9,0,0xc8a878,[['b',.9,.04,.02,0,.2,.26,0x4a3018],['b',.9,.04,.02,0,-.1,.26,0x4a3018]]],
+planter:[1.4,.5,.6,6,0x6a4a30,[['s',.5,.5,.5,-.3,.5,0,0x3a8a3a],['s',.4,.4,.4,.3,.45,0,0x4aa04a]]],
+telescope:[.5,.5,1.1,4,0x2a3040,[['c',.1,.9,.1,0,.9,0,0xb0b8c8]]],
+cabinet:[.7,.5,1.4,4,0x6a7a6a,[['b',.5,.04,.02,0,.4,.26,0x222222],['b',.5,.04,.02,0,0,.26,0x222222],['b',.5,.04,.02,0,-.4,.26,0x222222]]]};
+// furniture per room (Bedroom, Study, Library, Kitchen, Attic, Inverted, Gallery, Basement, Lab, Heart)
+const RS=[['bed','wardrobe','nightstand','desk','chair','trunk'],['desk','bookshelf','armchair','table','wardrobe','chair'],['bookshelf','bookshelf','armchair','table','desk','bookshelf'],['fridge','stove','counter','table','chair','pantry'],['trunk','boxes','crate','mirror','armchair','trunk'],['sofa','table','nightstand','piano','bookshelf','chair'],['pedestal','pedestal','bench','mirror','crate','pedestal'],['boiler','workbench','crate','boxes','pantry','trunk'],['console','workbench','server','fridge','table','chair'],['crib','dresser','armchair','trunk','bookshelf','nightstand'],['planter','planter','table','workbench','boxes','crate'],['bench','bench','bench','table','pedestal','piano'],['mirror','mirror','pedestal','mirror','bench','mirror'],['telescope','console','table','chair','cabinet','armchair'],['cabinet','cabinet','bookshelf','desk','boxes','cabinet'],['server','bed','piano','pedestal','mirror','console']];
+function furn(t){const[w,d,hh,tx,col,ex]=F[t],g=new THREE.Group(),mt=(c,x)=>new THREE.MeshLambertMaterial({color:c,map:x!=null?PT[x]:null});
+g.add(new THREE.Mesh(new THREE.BoxGeometry(w,hh,d),mt(col,tx)));
+for(const[k,a,b,c,x,y,z,cl,tt]of ex){const m=new THREE.Mesh(k=='b'?new THREE.BoxGeometry(a,b,c):k=='c'?new THREE.CylinderGeometry(a,a,b,10):new THREE.SphereGeometry(a/2,10,8),mt(cl,tt));m.position.set(x,y,z);g.add(m)}
+g.userData={w,d,hh,k:'prop',n:t};return g}
+function wtex(k){const N=256,c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d'),r=Math.random,A=(a,f)=>{g.fillStyle=`rgba(${f},${a})`};
+g.fillStyle='#d2d2d2';g.fillRect(0,0,N,N);
+for(let i=0;i<3000;i++){g.fillStyle=r()<.5?'rgba(0,0,0,.05)':'rgba(255,255,255,.07)';g.fillRect(r()*N,r()*N,2,2)}
+for(let i=0;i<40;i++){g.fillStyle='rgba(0,0,0,.03)';g.fillRect(r()*N,0,2+r()*6,N)}
+g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=2;
+if(k==0){for(let x=0;x<N;x+=32){g.fillStyle='rgba(0,0,0,.09)';g.fillRect(x,0,14,N)}for(let y=14;y<N;y+=40)for(let x=23;x<N;x+=32){g.fillStyle='rgba(0,0,0,.2)';g.beginPath();g.arc(x,y,3,0,7);g.fill()}}
+else if(k==1){for(let x=8;x<N;x+=64)g.strokeRect(x,24,56,N-70);for(let i=0;i<N;i+=3){g.fillStyle=`rgba(0,0,0,${r()*.08})`;g.fillRect(0,i,N,1)}}
+else if(k==2){g.fillStyle='rgba(0,0,0,.28)';g.fillRect(0,N*.6,N,N*.4);for(let x=6;x<N;x+=64)g.strokeRect(x,N*.64,52,N*.28);for(let x=0;x<N;x+=24){g.fillStyle='rgba(0,0,0,.07)';g.fillRect(x,0,10,N*.6)}}
+else if(k==3){g.fillStyle='rgba(255,255,255,.3)';g.fillRect(0,N*.45,N,N*.55);for(let i=N*.45;i<N;i+=16){g.beginPath();g.moveTo(0,i);g.lineTo(N,i);g.stroke()}for(let x=0;x<N;x+=16){g.beginPath();g.moveTo(x,N*.45);g.lineTo(x,N);g.stroke()}}
+else if(k==4){for(let x=0;x<N;x+=28){g.fillStyle=`rgba(0,0,0,${.05+r()*.2})`;g.fillRect(x,0,26,N);g.beginPath();g.moveTo(x,0);g.lineTo(x,N);g.stroke()}}
+else if(k==5){for(let i=0;i<N;i+=64)for(let j=0;j<N;j+=64){g.beginPath();g.moveTo(i+32,j);g.lineTo(i+64,j+32);g.lineTo(i+32,j+64);g.lineTo(i,j+32);g.closePath();g.stroke()}}
+else if(k==6){g.fillStyle='rgba(255,255,255,.25)';g.fillRect(0,0,N,N);g.fillStyle='rgba(0,0,0,.2)';g.fillRect(0,N*.5,N,6)}
+else if(k==7){for(let y=0;y<N;y+=32)for(let x=(y/32%2)*32-64;x<N;x+=64){g.fillStyle=`rgba(0,0,0,${r()*.15})`;g.fillRect(x,y,64,32);g.strokeRect(x,y,64,32)}}
+else if(k==8){for(let x=0;x<N;x+=64)for(let y=0;y<N-40;y+=64){g.strokeRect(x+2,y+2,60,60);g.fillStyle='#666';for(const[a,b]of[[8,8],[56,8],[8,56],[56,56]]){g.beginPath();g.arc(x+a,y+b,2,0,7);g.fill()}}}
+else if(k==10){g.fillStyle='rgba(255,255,255,.3)';for(let i=0;i<40;i++){g.beginPath();g.arc(r()*N,r()*N*.8,2+r()*4,0,7);g.fill()}for(let x=0;x<N;x+=40){g.fillStyle='rgba(255,255,255,.12)';g.fillRect(x,0,20,N)}}
+else if(k==11){g.lineWidth=4;for(let x=0;x<N;x+=64)g.strokeRect(x,0,64,N-24);for(let i=0;i<14;i++){g.fillStyle='rgba(0,70,0,.14)';g.fillRect(r()*N,r()*N,20+r()*40,20+r()*40)}}
+else if(k==12){for(let y=0;y<N;y+=48)for(let x=(y/48%2)*40-80;x<N;x+=80){g.fillStyle=`rgba(0,0,0,${r()*.16})`;g.fillRect(x,y,80,48);g.strokeRect(x,y,80,48)}}
+else if(k==13){for(let i=-N;i<N;i+=28){g.fillStyle='rgba(255,255,255,.14)';g.beginPath();g.moveTo(i,N);g.lineTo(i+14,N);g.lineTo(i+14+N,0);g.lineTo(i+N,0);g.fill()}}
+else if(k==14){g.fillStyle='rgba(0,0,0,.55)';g.fillRect(0,0,N,N);g.fillStyle='#fff';for(let i=0;i<70;i++)g.fillRect(r()*N,r()*(N-30),1+r()*1.5,1+r()*1.5)}
+else if(k==15){for(let y=40;y<N;y+=40){g.fillStyle='rgba(0,0,0,.4)';g.fillRect(0,y,N,4);for(let x=0;x<N;x+=8){g.fillStyle=`hsl(${r()*360} 35% ${25+r()*20}%)`;g.fillRect(x,y-8-r()*20,6,28)}}}
+else{g.fillStyle='rgba(120,0,0,.12)';g.fillRect(0,0,N,N);for(let n=0;n<6;n++){g.beginPath();let x=r()*N,y=0;g.moveTo(x,y);while(y<N){x+=r()*30-15;y+=r()*30;g.lineTo(x,y)}g.stroke()}}
+for(let n=0;n<4;n++){const x=r()*N,y=r()*N,q=g.createRadialGradient(x,y,2,x,y,30+r()*40);q.addColorStop(0,'rgba(0,0,0,.14)');q.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=q;g.fillRect(0,0,N,N)}
+g.fillStyle='rgba(0,0,0,.2)';g.fillRect(0,0,N,10);g.fillStyle='rgba(0,0,0,.35)';g.fillRect(0,N-22,N,22);g.fillStyle='rgba(255,255,255,.3)';g.fillRect(0,N-24,N,2);
+const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(3,1);return t}
+function ptex(k){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),r=Math.random;g.fillStyle='#d4d4d4';g.fillRect(0,0,64,64);g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=2;
+if(k==0){for(let i=0;i<64;i+=3){g.fillStyle=`rgba(0,0,0,${r()*.25})`;g.fillRect(0,i,64,2)}g.strokeRect(5,5,54,54)}
+else if(k==1){g.lineWidth=3;g.strokeRect(2,2,60,60);g.beginPath();g.moveTo(2,2);g.lineTo(62,62);g.moveTo(62,2);g.lineTo(2,62);g.stroke()}
+else if(k==2)for(let y=0;y<64;y+=16){g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,y,64,3);for(let x=2;x<62;x+=6){g.fillStyle=`hsl(${r()*360} 45% ${35+r()*15}%)`;g.fillRect(x,y+4,5,11)}}
+else if(k==3){for(let i=0;i<64;i+=4){g.fillStyle='rgba(0,0,0,.12)';g.fillRect(i,0,2,64);g.fillRect(0,i,64,2)}}
+else if(k==4){for(let i=0;i<64;i+=2){g.fillStyle=`rgba(0,0,0,${r()*.15})`;g.fillRect(0,i,64,1)}g.fillStyle='#555';for(const x of[6,58])for(const y of[6,58]){g.beginPath();g.arc(x,y,2,0,7);g.fill()}}
+else if(k==5){g.strokeRect(4,4,56,26);g.strokeRect(4,34,56,26)}
+else for(let x=0;x<64;x+=16)for(let y=0;y<64;y+=16)g.strokeRect(x,y,16,16);
+return new THREE.CanvasTexture(c)}
+function rugTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');for(let i=0;i<6;i++){g.fillStyle=i%2?'#ddd':'#888';g.fillRect(i*5,i*5,64-i*10,64-i*10)}return new THREE.CanvasTexture(c)}
+const vis=(o,v)=>{o.visible=!!v;o.layers.set(v?0:1)};
+function hide(o,m){const low=props.filter(p=>p.userData.hh<1.3),p=m=='top'&&low.length?low[Math.random()*low.length|0]:props[Math.random()*props.length|0],u=p.userData;o.userData.w=-1;
+if(m=='under'){G.add(o);o.position.set(rug.position.x+(Math.random()-.5),.005,rug.position.z+(Math.random()-.5)*.6);o.rotation.set(-PI/2,0,Math.random()*PI);vis(o,0);rug.userData.k='rug';return}
+p.add(o);vis(o,1);
+if(m=='inside'){vis(o,0);S.inside=p;o.position.set(0,u.hh/2+.02,0);o.rotation.set(-PI/2,0,0);return}
+if(m=='top'){o.position.set((Math.random()-.5)*u.w*.6,u.hh/2+.02,(Math.random()-.5)*u.d*.6);o.rotation.set(-PI/2,0,Math.random()*PI);return}
+const n=Math.random()*4|0,a=n*PI/2,e=n%2?u.w/2:u.d/2,t=(Math.random()-.5)*(n%2?u.d:u.w)*.6;
+o.position.set(Math.sin(a)*(e+.02)+Math.cos(a)*t,(Math.random()-.5)*(u.hh-.5),Math.cos(a)*(e+.02)-Math.sin(a)*t);o.rotation.set(0,a,0)}
+function init3D(){try{ren=new THREE.WebGLRenderer({antialias:false});}catch(e){return false}
+ren.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(ren.domElement);
+scene=new THREE.Scene();cam=new THREE.PerspectiveCamera(72,1,.1,60);cam.rotation.order='YXZ';
+amb=new THREE.AmbientLight(0xffffff,.6);lamp=new THREE.PointLight(0xffe0a0,1,14);cam.add(lamp);scene.add(cam,amb);
+rc=new THREE.Raycaster();v2=new THREE.Vector2();onresize();bindInput(ren.domElement);return true}
+function onresize(){if(!ren)return;const W=innerWidth,H=innerHeight;ren.setPixelRatio(Math.min(devicePixelRatio,2));ren.setSize(W,H);cam.aspect=W/H;cam.fov=W/H<1?82:64;cam.updateProjectionMatrix()}
+function wallCol(){const h=((CH[S.ch][1]+S.mut*47)%360)/360,c=new THREE.Color().setHSL(h,.35,.6);[0,1,4,5].forEach(i=>wm[i].color.copy(c));wm[2].color.copy(c).multiplyScalar(.6)}
+function build(){if(G)scene.remove(G);G=new THREE.Group();scene.add(G);const c=CH[S.ch],h=c[1];R=S.R0=c[2];
+const wt=wtex(CH[S.ch][5]??S.ch),m=()=>new THREE.MeshLambertMaterial({side:THREE.BackSide,map:wt});wm=[m(),m(),new THREE.MeshLambertMaterial({side:THREE.BackSide}),new THREE.MeshLambertMaterial({map:tex(h,S.ch),side:THREE.BackSide,color:new THREE.Color().setHSL(h/360,.3,.55)}),m(),m()];wallCol();
+room=new THREE.Mesh(new THREE.BoxGeometry(2*R,3,2*R),wm);room.position.y=1.5;G.add(room);
+PT=[0,1,2,3,4,5,6].map(ptex);props=[];for(let i=0;i<Math.min(6+S.ch,14);i++){const p=furn(RS[S.ch][i%6]);G.add(p);props.push(p)}
+rug=new THREE.Mesh(new THREE.PlaneGeometry(3,2),new THREE.MeshLambertMaterial({map:rugTex()}));rug.rotation.x=-PI/2;G.add(rug);
+const pc=document.createElement('canvas');pc.width=32;pc.height=24;const pg=pc.getContext('2d');pg.fillStyle='#d8caa0';pg.fillRect(0,0,32,24);pg.fillStyle='#6a5a3a';for(let y=4;y<22;y+=4)pg.fillRect(3,y,26-(y%3)*4,1);const pp=new THREE.CanvasTexture(pc);
+const mk=(k,g,col,em,map)=>{const o=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:col,emissive:em,map}));o.userData.k=k;G.add(o);return o};
+O={note:mk('note',new THREE.BoxGeometry(.3,.22,.02),0xffffff,0x120f08,pp),safe:mk('safe',new THREE.BoxGeometry(.8,.8,.7),0x2c2f36,0),door:mk('door',new THREE.BoxGeometry(1.1,2.2,.15),0x6b3f22,0x1a0c05)};
+if(S.parts.length>1){O.paint=mk('paint',new THREE.BoxGeometry(.55,.4,.04),0x7aa0c8,0x0a1018);O.paint.visible=false}
+O.xn1=mk('decoy',new THREE.BoxGeometry(.3,.22,.02),0xffffff,0x120f08,pp);O.xn2=mk('decoy',new THREE.BoxGeometry(.3,.22,.02),0xffffff,0x120f08,pp);O.xf1=mk('decoy',new THREE.BoxGeometry(.7,.5,.05),0x3a2a1a,0);O.xf2=mk('decoy',new THREE.BoxGeometry(.5,.7,.05),0x2a3a3a,0);
+if(DL()>=2){O.xn3=mk('decoy',new THREE.BoxGeometry(.3,.22,.02),0xffffff,0x120f08,pp);O.xn4=mk('decoy',new THREE.BoxGeometry(.3,.22,.02),0xffffff,0x120f08,pp)}for(const k in O)if(k[1]=='n'&&k!='note')O[k].userData.t=DL()?'A crossed-out number: '+(100+(Math.random()*800|0))+'.':'Just blank paper.';O.xf1.userData.t=O.xf2.userData.t='A faded photo of a stranger. Nothing useful.';
+const sc=new THREE.Mesh(new THREE.PlaneGeometry(.3,.15),new THREE.MeshBasicMaterial({color:0x40ff80}));sc.position.set(0,.15,.36);O.safe.add(sc);
+const kn=new THREE.Mesh(new THREE.SphereGeometry(.07),new THREE.MeshBasicMaterial({color:0xffd060}));kn.position.set(.4,0,.1);O.door.add(kn);
+const dk=c[3]&2;scene.fog=new THREE.Fog(0x08080c,dk?2:9,dk?9:30);scene.background=new THREE.Color(0x08080c);amb.intensity=dk?.12:.38;lamp.intensity=dk?1.4:1;lamp.distance=(dk?5:8)-DL()*.5}
+let room,rug,PT;
+function place(){rug.position.set((Math.random()-.5)*R*.6,.01,(Math.random()-.5)*R*.6);rug.rotation.z=Math.random()*PI;rug.material.color.setHSL(Math.random(),.4,.55);rug.visible=true;S.inside=null;{const M=[['side','side','top'],['side','top','under','inside'],['top','under','inside','inside'],['under','inside','inside','top']][DL()];S.mode=M[Math.random()*M.length|0]}const s=[...Array(12).keys()].sort(()=>Math.random()-.5);let i=0;
+for(const k in O){const o=O[k];if(k=='note'||k[1]=='n'){hide(o,k=='note'?S.mode:'side');continue}const q=s[i++],w=q%4,off=((q/4|0)-1)*R*.55,y=k=='door'?1.1:k=='safe'?.4:1.5,dp=k=='safe'?.45:.08;
+if(w<2)o.position.set(off,y,w?-R+dp:R-dp);else o.position.set(w==2?R-dp:-R+dp,y,off);
+o.rotation.y=[PI,0,-PI/2,PI/2][w];o.userData.w=w}
+for(const p of props){let x,z,t=0;do{x=(Math.random()*2-1)*(R-1);z=(Math.random()*2-1)*(R-1);t++}while(t<30&&Math.hypot(x-pl.x,z-pl.z)<1.8);p.position.set(x,p.userData.hh/2,z);p.rotation.y=Math.random()<.5?0:PI}}
+function clampPl(){for(const p of props){const u=p.userData,hx=u.w/2+.3,hz=u.d/2+.3,dx=pl.x-p.position.x,dz=pl.z-p.position.z;
+if(Math.abs(dx)<hx&&Math.abs(dz)<hz){if(hx-Math.abs(dx)<hz-Math.abs(dz))pl.x=p.position.x+(dx<0?-hx:hx);else pl.z=p.position.z+(dz<0?-hz:hz)}}
+const L=R-.4;pl.x=Math.max(-L,Math.min(L,pl.x));pl.z=Math.max(-L,Math.min(L,pl.z))}
+function mutate(){if(!run||ui)return;mcd=performance.now();S.mut++;if(S.mut>=5)ach('blink');$('fx').style.opacity=1;beep(90,.5,'sawtooth',.2);
+setTimeout(()=>{const f=CH[S.ch][3];S.f=1;if(f&4){S.f=.65+Math.random()*.4;room.scale.set(S.f,1,S.f);R=S.R0*S.f}
+if(f&1)rollT=rollT?0:PI;wallCol();lamp.color.setHSL(Math.random(),.35,.72);place();if(O.paint)O.paint.visible=true;clampPl();$('fx').style.opacity=0;toast('The room has changed.')},380)}
+// ---------- flow ----------
+function startChapter(n){S.ch=n;S.R0=0;const r=rng(S.seed+n*131),d=[0,0,0].map(()=>1+(r()*7|0));S.code=d.join('');S.parts=T[n](...d);
+S.got={};S.mut=0;S.hl=0;S.hs=-1;S.rt=S.rh=0;if(n==5)ach('half');if(n==12)ach('nm');pl={x:0,z:0,yaw:0,pitch:0};roll=rollT=0;away=mt=0;build();place();inv();sv();
+$('hl').textContent=`Room ${n+1} of ${CH.length}: ${CH[n][0]} · ${DN[DL()]}`;sh('menu',0);$('cn').textContent=`${CH[n][0]} · ${DN[DL()]}`;$('cs').textContent=CH[n][4];sh('card',1);run=false;drone();
+setTimeout(()=>{sh('card',0);run=true;mcd=performance.now()},3200)}
+function win(){run=false;if(!S.rh)ach('clear');if(S.rt<90)ach('fast');beep(660,.4,'triangle',.2);$('fx').style.opacity=1;setTimeout(()=>{$('fx').style.opacity=0;if(S.ch+1>=CH.length)ending();else startChapter(S.ch+1)},700)}
+function ending(){ach('free');const e=S.hints<=12?0:S.hints<=28?1:2;try{localStorage.removeItem('shiftroom')}catch(x){}cine(END[e],()=>{menu()})}
+function menu(){$('bc').style.display=ld()?'':'none';sh('menu',1)}
+function use(k,o){beep(520,.08,'square',.08);
+if(k=='note'){S.got.note=1;ach('first');if(S.rt<25)ach('sharp');openM(`<p>${S.parts[0]}</p>`);jr(S.parts[0]);inv()}
+else if(k=='paint'){S.got.paint=1;openM(`<p>${S.parts[1]}</p>`);jr(S.parts[1]);inv()}
+else if(k=='decoy')toast(o.userData.t);
+else if(k=='prop'){if(o===S.inside&&!O.note.visible){S.inside=null;vis(O.note,1);use('note',O.note)}else toast('You search the '+o.userData.n+'. Nothing.')}
+else if(k=='rug'){rug.visible=false;vis(O.note,1);use('note',O.note)}
+else if(k=='safe'){if(S.got.key)return toast('The safe is empty.');keypad()}
+else if(k=='door'){if(S.got.key)win();else toast('Locked. It needs a key.')}}
+function keypad(){const d=[0,0,0];openM('<p>Enter the three-digit code.</p><div id="kp"></div><button id="go">Open safe</button>');
+d.forEach((_,i)=>{const b=document.createElement('button');b.textContent=0;b.onclick=()=>{d[i]=(d[i]+1)%10;b.textContent=d[i]};$('kp').append(b)});
+$('go').onclick=()=>{if(d.join('')==S.code){S.got.key=1;ach('safe');closeM();inv();toast('Click. Inside the safe: a brass key.');beep(880,.3,'triangle',.15);setTimeout(mutate,1800)}else{toast(DL()>=2?'Wrong code. The room reacts.':'Wrong code.');beep(150,.3,'sawtooth',.15);if(DL()>=2){closeM();setTimeout(mutate,700)}}}}
+function hint(){const st=!S.got.note?0:(S.parts.length>1&&!S.got.paint)?1:!S.got.key?2:3;if(S.hs!=st){S.hs=st;S.hl=0}S.hints++;S.rh++;
+const H=[['Look for a small paper note. It can hide anywhere.','Check the sides and tops of furniture, look under things, and tap furniture to search it.',({side:'It is stuck to the side of a piece of furniture.',top:'It lies on top of a low piece of furniture.',under:'It is hidden under the rug. Tap the rug.',inside:'It is tucked inside a '+(S.inside&&S.inside.userData.n)+'.'})[S.mode]],
+['The room hides a second clue.','Look away for a few seconds so the room shifts, then search for a framed picture.','After the room changes, a picture appears on a wall.'],
+['Find the safe: a dark box with a green screen.','Combine your clues, then enter the code at the safe.',`The code is ${S.code}.`],
+['Find the tall brown door.','The door moves each time the room changes. Look all around.',`The door is on the ${WN[O.door.userData.w]} wall.`]][st];
+toast(H[Math.min(S.hl++,2)])}
+function journal(){openM('<b>Journal</b>'+(S.jr.length?S.jr.map(x=>`<p>${x}</p>`).join(''):'<p>Nothing yet. Find a note.</p>'))}
+function pause(){openM(`<b>Paused</b><p>Look sensitivity</p><input id="sn" type="range" min="0.4" max="2.5" step="0.1" value="${sens}" style="width:100%"><p><label><input id="sd" type="checkbox" ${snd?'checked':''}> Sound</label></p><button id="qt">Quit to menu</button>`);
+$('sn').oninput=e=>sens=+e.target.value;$('sd').onchange=e=>snd=e.target.checked;$('qt').onclick=()=>{closeM();run=false;menu()}}
+// ---------- input ----------
+function interact(x,y){if(!run||ui)return;v2.set(x/innerWidth*2-1,-(y/innerHeight)*2+1);cam.updateMatrixWorld();rc.setFromCamera(v2,cam);
+const L=Object.values(O).filter(o=>o.visible).concat(props);if(S.mode=='under'&&rug.visible)L.push(rug);const h=rc.intersectObjects(L,true)[0];if(!h)return;let o=h.object;while(o&&!o.userData.k)o=o.parent;if(!o)return;
+if(h.distance>2.6)return toast('Too far away. Walk closer.');use(o.userData.k,o)}
+function bindInput(cv){cv.addEventListener('pointerdown',e=>{if(!run||ui)return;try{cv.setPointerCapture(e.pointerId)}catch(x){}
+const j=e.clientX<innerWidth*.4&&e.pointerType!='mouse';ptr[e.pointerId]={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY,t:performance.now(),j,mv:0};
+if(j){stick=e.pointerId;const b=$('jb');b.style.display='block';b.style.left=e.clientX+'px';b.style.top=e.clientY+'px';$('jk').style.transform='none'}});
+cv.addEventListener('pointermove',e=>{const p=ptr[e.pointerId];if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.mv+=Math.abs(dx)+Math.abs(dy);
+if(p.j){const sx=Math.max(-50,Math.min(50,e.clientX-p.sx)),sy=Math.max(-50,Math.min(50,e.clientY-p.sy));inp.mx=sx/50;inp.mz=sy/50;$('jk').style.transform=`translate(${sx*.6}px,${sy*.6}px)`}
+else{const d=Math.cos(roll)>0?1:-1;pl.yaw-=dx*.005*sens*d;pl.pitch=Math.max(-1.2,Math.min(1.2,pl.pitch-dy*.005*sens*d));p.x=e.clientX;p.y=e.clientY}});
+const up=e=>{const p=ptr[e.pointerId];if(!p)return;if(p.j){inp.mx=inp.mz=0;$('jb').style.display='none';stick=null}else if(p.mv<12&&performance.now()-p.t<400)interact(e.clientX,e.clientY);delete ptr[e.pointerId]};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up)}
+addEventListener('keydown',e=>{inp.k[e.key.toLowerCase()]=1});addEventListener('keyup',e=>{inp.k[e.key.toLowerCase()]=0});addEventListener('resize',onresize);addEventListener('orientationchange',()=>setTimeout(onresize,300));if(window.visualViewport)visualViewport.addEventListener('resize',onresize);
+// ---------- loop ----------
+function loop(t){requestAnimationFrame(loop);const dt=Math.min((t-last)/1000,.1);last=t;if(!G)return;
+if(run&&!ui){S.t=(S.t||0)+dt;S.rt=(S.rt||0)+dt;if((S.t|0)!=S.ts){S.ts=S.t|0;$('tm').textContent=fmt(S.t)}const K=inp.k,d=Math.cos(roll)>0?1:-1;let fx=inp.mx+((K.d||K.arrowright?1:0)-(K.a||K.arrowleft?1:0)),fz=inp.mz+((K.s||K.arrowdown?1:0)-(K.w||K.arrowup?1:0));fx*=d;const l=Math.hypot(fx,fz);if(l>1){fx/=l;fz/=l}
+const c=Math.cos(pl.yaw),s=Math.sin(pl.yaw);pl.x+=(c*fx+s*fz)*2.7*dt;pl.z+=(-s*fx+c*fz)*2.7*dt;clampPl();
+mt+=dt;const fw=new THREE.Vector3();cam.getWorldDirection(fw);let seen=0;for(const k in O){const o=O[k];if(o.visible&&o.userData.k!='decoy'&&o.getWorldPosition(new THREE.Vector3()).sub(cam.position).normalize().dot(fw)>.55)seen=1}
+away=seen?0:away+dt;if(((S.got.note&&away>6-DL())||mt>30-4*DL())&&performance.now()-mcd>(7-DL())*1000){away=mt=0;mutate()}}
+roll+=(rollT-roll)*Math.min(1,dt*2.5);cam.position.set(pl.x,1.6,pl.z);cam.rotation.set(pl.pitch,pl.yaw,roll);ren.render(scene,cam)}
+// ---------- UI wiring ----------
+$('mx').onclick=closeM;$('ba').onclick=()=>openM('<b>Achievements</b>'+AC.map(a=>`<p>${A[a[0]]?'✅':'⬜'} <b>${a[1]}</b>: ${a[2]}</p>`).join(''));$('bh').onclick=()=>{if(run&&!ui)hint()};$('bj').onclick=()=>{if(run&&!ui)journal()};$('bp').onclick=()=>{if(run&&!ui)pause()};
+$('bn').onclick=()=>{S={hints:0,jr:[],seed:1+(Math.random()*1e6|0)};sh('menu',0);beep(300,.05,'sine',.01);cine(INTRO,()=>startChapter(0))};
+$('bc').onclick=()=>{const d=ld();if(!d)return;S=Object.assign({hints:0,jr:[],seed:1},d);beep(300,.05,'sine',.01);startChapter(d.ch)};
+$('bw').onclick=()=>openM('<b>How to play</b><p>Left thumb: move. Drag anywhere on the right: look. Tap an object to use it.</p><p>Read the note, find every clue, enter the code at the safe, take the key, and leave through the door.</p><p>Look away from the clues for a few seconds and the room changes: walls, furniture, even the door. Clues never disappear, but they move.</p><p>Desktop: WASD, drag to look, click to use.</p>');
+if(typeof THREE=='undefined'){$('err').textContent='The 3D engine did not load. Connect to the internet once, then reload.';$('bn').disabled=$('bc').disabled=true}
+else if(!init3D()){$('err').textContent='This device does not support WebGL, which the game needs.';$('bn').disabled=$('bc').disabled=true}
+else requestAnimationFrame(loop);
+$('bc').style.display=ld()?'':'none';
+</script></body></html>
